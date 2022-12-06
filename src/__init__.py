@@ -1,3 +1,2 @@
-import core
-import api
-import capture
+# capture backend version
+__version__ = '0'
