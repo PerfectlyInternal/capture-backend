@@ -2,6 +2,8 @@ import asyncio
 
 from aiohttp import web
 
+app = web.Application()
+
 async def index(request):
     return web.Response(text='index')
 
@@ -15,10 +17,13 @@ async def capture_ui(request):
 async def config_update(request):
     return web.Response(text="config_update")
 
+# method to add routes from other modules
+# TODO: support more than just get
+def add_http_route(endpoint, callback):
+    app.router.add_routes([web.get(endpoint, callback)])
+
 # start the webserver
 def init_app(port):
-    app = web.Application()
-
     # connect endpoints here
     app.router.add_routes([web.get('/', index),
                            web.get('/cap_ui', capture_ui)
