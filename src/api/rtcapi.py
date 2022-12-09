@@ -3,7 +3,7 @@ import logging
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 
-from httpapi import add_http_endpoint
+from httpapi import add_http_route
 
 pcs = set()
 
@@ -35,4 +35,4 @@ async def offer(request):
     )
 
 async def init():
-    add_http_endpoint('open_rtc_connection', offer)
+    add_http_route('open_rtc_connection', offer)
