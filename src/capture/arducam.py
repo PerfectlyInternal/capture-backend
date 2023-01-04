@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import logging
+import time
 
 import arducam as ac
 
@@ -40,23 +41,41 @@ Error raised when an ArduCam-related class encouters a TypeError
 """
 class ArduCamDataTypeError(TypeError):
     def __init__(self, ctx, expected, got):
-        super.__init__(f"{ctx} expected type {expected}, but got {got} instead.")
+        super.__init__(self, f"{ctx} expected type {expected}, but got {got} instead.")
 
 """
 Error raised when the ArduCam interface library fails
 """
 class ArduCamCriticalError(Exception):
     def __init__(self, msg):
-        self.add_note(msg)
+        self.msg = msg
 
 """
 Error raised when capturing a frame fails
 """
 class ArduCamCaptureError(Exception):
     def __init__(self, msg):
-        self.add_note(msg)
+        self.msg = msg
 
 # Classes
+
+"""
+ArduCamManager:
+Manages ArduCams and creates ArduCamSources for them
+"""
+class ArduCamManager:
+    def __init__(self):
+        self._devices = ac.get_devices()
+
+    def get_devices(self):
+        self._devices = ac.get_devices()
+        return [(device.serial, device.usb_index) for device in self._devices]
+
+
+"""
+ArduCamSource:
+Wrapper class for one (1) ArduCam unit
+"""
 class ArduCamSource:
     def __init__(
             self,
@@ -71,10 +90,18 @@ class ArduCamSource:
         self._cfg_file = cfg_file
 
         self._active = False
+        self._init_done = False
 
-        self._init_cam()
+        try:
+            self._init_cam()
+        except ArduCamCriticalError as error: # init may fail, catch and handle it """gracefully"""
+            logger.debug(error.msg)
+        else:
+            self._init_done = True
 
-        self._last_frame = np.zeros(frame_size)
+    @property
+    def init_done(self): # check if init was a success
+        return self._init_done
 
     def _init_cam(self):
         # check that the cam id is a valid number
@@ -98,6 +125,7 @@ class ArduCamSource:
             raise ArduCamCriticalError(f"Error opening ArduCam with id {self._cam_id}: {ret}, {ERROR_CODES[ret]}")
 
         # start capture
+        logger.debug(f"Attempting to begin capture on ArduCam with id {self._cam_id}")
         try:
             ret = ac.begin_capture(self._cam_id)
         except RuntimeError as error:
@@ -106,20 +134,28 @@ class ArduCamSource:
 
         if ret == 0x0000:  # 0x0000: 'USB_CAMERA_NO_ERROR'
             # cam capture success
-            logger.debug(f"Success beginning capture ArduCam with id {self._cam_id}")
+            logger.debug(f"Success beginning capture on ArduCam with id {self._cam_id}")
             self._active = True
         else:
             # arducam interface lib returned an error code
-            raise ArduCamCriticalError(f"Error beginning capture ArduCam with id {self._cam_id}: {ret}, {ERROR_CODES[ret]}")
+            raise ArduCamCriticalError(f"Error beginning capture ArduCam on with id {self._cam_id}: {ret}, {ERROR_CODES[ret]}")
 
     def close(self):
-        pass
-
-    def _capture_frame(self):
+        logger.debug(f"Attempting shutdown of ArduCam with id {self._cam_id}")
         try:
-            self._last_frame = ac.capture_img(self._cam_id)
+            ac.end_capture(self._cam_id)
+            ac.close_device(self._cam_id)
+        except RuntimeError as error: # if there is an error, we don't care because the arudcam source is closed anyways
+            logger.debug(f"Error while shutting down ArduCam with id {self._cam_id}")
+        logger.debug(f"Shutdown of ArduCam with id {self._cam_id} complete")
+
+    def capture_frame(self):
+        img = None
+        try:
+            img = ac.capture_img(self._cam_id)
         except RuntimeError as error:
             raise ArduCamCaptureError(f"Failed to capture frame on camera id {self._cam_id}")
+        if img is None:
+            raise ArduCamDataTypeError(self, cv2.Mat, None)
 
-    def get_frame(self):
-        return self._last_frame
+        return np.array(img), time.time()
