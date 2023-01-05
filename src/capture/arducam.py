@@ -34,6 +34,33 @@ ERROR_CODES = {
     0x10000: 'config file not found',
 }
 
+# Registers
+# Refer to datasheet for this: https://datasheetspdf.com/pdf-file/1252892/OmniVision/OV7251/1
+# note: registers are little-endian
+
+# exposure is a 16 bit value with 4 bits for debug, distributed like so:
+# |           |                  exposure time                |           |
+# |   unused  |15|14|13|12|11|10|09|08|07|06|05|04|03|02|01|00|   debug   |
+# |07|06|05|04|03|02|01|00|07|06|05|04|03|02|01|00|07|06|05|04|03|02|01|00|
+# |         0x3500        |         0x3501        |         0x3502        |
+
+# frame length (vertical timing size?) is a 16 bit value distributed like so
+# |                 frame length                  |
+# |15|14|13|12|11|10|09|08|07|06|05|04|03|02|01|00|
+# |07|06|05|04|03|02|01|00|07|06|05|04|03|02|01|00|
+# |         0x380e        |         0x380f        |
+
+# hardware-level image manipulation is 16 bits of flags distributed like so:
+# ??: unknown
+# vf: vertical flip
+# vb: vertical binning
+# hm: horizontal mirror
+# hb: horizontal binning
+# db: debug
+# |??|??|  debug |vf|vb|    debug     |??|hm|db|hb|
+# |07|06|05|04|03|02|01|00|07|06|05|04|03|02|01|00|
+# |         0x3820        |         0x3821        |
+
 # Errors
 
 """
@@ -102,6 +129,41 @@ class ArduCamSource:
     @property
     def init_done(self): # check if init was a success
         return self._init_done
+
+    @property
+    def exposure_time(self):
+        # see exposure time register description at the top of this file
+        try:
+            return int(
+                hex(ac.read_reg(self._cam_id, 0x3500))[2:].rjust(2, '0')[1]
+                + hex(ac.read_reg(self._cam_id, 0x3501))[2:].rjust(2, '0')
+                + hex(ac.read_reg(self._cam_id, 0x3502))[2:].rjust(2, '0')[:1], 16
+            )
+        except KeyError:
+            return -1
+
+    @exposure_time.setter
+    def exposure_time(self, new_exposure_time):
+        try:
+            assert 0 < new_exposure_time <= 0xffff
+            h = hex(new_exposure_time)[2:].rjust(4, '0')
+            nums = (h[0], h[1:3], h[3])
+
+            w = hex(ac.read_reg(self._cam_id, 0x3500))[2:].rjust(2, '0')[0] + h[0]
+            ac.write_reg(self._cam_id, 0x3500, int(w, 16))
+
+            w = h[1:3]
+            ac.write_reg(self._cam_id, 0x3501, int(w, 16))
+
+            w = h[3] + hex(ac.read_reg(self._cam_id, 0x3502))[2:].rjust(2, '0')[1]
+            ac.write_reg(self._cam_id, 0x3502, int(w, 16))
+
+        except KeyError:
+            pass
+
+    @property
+    def frame_length(self):
+        return (ac.read_reg(self._idx_backup, 0x380e) * 0x100) + ac.read_reg(self._idx_backup, 0x380f)
 
     def _init_cam(self):
         # check that the cam id is a valid number
