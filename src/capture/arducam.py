@@ -211,7 +211,23 @@ class ArduCamSource:
             logger.debug(f"Error while shutting down ArduCam with id {self._cam_id}")
         logger.debug(f"Shutdown of ArduCam with id {self._cam_id} complete")
 
+    def re_init(self, new_id):
+        self._active = False
+        self._init_done = False
+        self.close()
+
+        self._cam_id = new_id
+        try:
+            self._init_cam()
+        except ArduCamCriticalError as error:  # init may fail, catch and handle it """gracefully"""
+            logger.debug(error.msg)
+        else:
+            self._init_done = True
+
     def capture_frame(self):
+        if not self._active:
+            return np.zeros(self._frame_size) # must return np.ndarray
+
         img = None
         try:
             img = ac.capture_img(self._cam_id)
