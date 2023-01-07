@@ -26,7 +26,7 @@ def add_http_route(endpoint, callback):
 def init_app(port):
     # connect endpoints here
     app.router.add_routes([web.get('/', index),
-                           web.get('/cap_ui', capture_ui)
+                           web.get('/cap_ui', capture_ui),
                            web.post('/cfg_update', config_update)])
     
     web.run_app(app, port=port)
