@@ -232,8 +232,8 @@ class ArduCamSource:
         try:
             img = ac.capture_img(self._cam_id)
         except RuntimeError as error:
-            raise ArduCamCaptureError(f"Failed to capture frame on camera id {self._cam_id}")
+            raise ArduCamCaptureError(f"Critical error while capturing frame on camera id {self._cam_id}")
         if img is None:
-            raise ArduCamDataTypeError(self, cv2.Mat, None)
-
+            logger.debug(f"Failed to capture frame on camera id {self._cam_id} (img = None)")
+            return np.zeros(self._frame_size)
         return np.array(img), time.time()
